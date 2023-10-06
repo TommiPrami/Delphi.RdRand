@@ -1,6 +1,6 @@
 # Delphi.RdRand
 
-Library to get CPu implemented Seed and Random number generators RDSEED and RDRND
+Library to get CPU implemented Seed and Random number generators RDSEED and RDRND
 
 ### Add supported CPU:s here:
 
@@ -10,4 +10,4 @@ Library to get CPu implemented Seed and Random number generators RDSEED and RDRN
   * Kas Ob. 
 
 ### TODO: 
-* Needs check for this feature ins implemented in the CPU, function RdRndAvailable: Boolean; etc.
+* Needs check for this feature is implemented in the CPU, function RdRndAvailable: Boolean; etc.
