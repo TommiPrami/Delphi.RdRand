@@ -4,10 +4,11 @@ Library to get CPU implemented Seed and Random number generators RDSEED and RDRN
 
 ### Add supported CPU:s here:
 
-### Thanks to (actual people implemented this): 
-* Forum post about this: https://en.delphipraxis.net/topic/10271-getting-rdseed-with-delphi/?tab=comments#comment-81748
-  * DelphiUdIT
-  * Kas Ob. 
+### Forum post about this 
+* https://en.delphipraxis.net/topic/10271-getting-rdseed-with-delphi/?tab=comments#comment-81748
+  * Special thanks Delphi Praxis users (ones that made vasta majority of implementation and gave lot of insights on this matter). 
+    * DelphiUdIT
+    * Kas Ob
 
 ### TODO: 
 * Needs check for this feature is implemented in the CPU, function RdRndAvailable: Boolean; etc.
