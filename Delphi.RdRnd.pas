@@ -3,9 +3,9 @@
 interface
 
 type
-  TRDRANDAvailability = record
-    RDRANDAvailable: Boolean;  // True if RDRAND is available
-    RDSEEDAvailable: Boolean;  // True if RDSEED is available
+  TRDRANDAvailable = record
+    RDRAND: Boolean;  // True if RDRAND is available
+    RDSEED: Boolean;  // True if RDSEED is available
   end;
 
 {$IF Defined(WIN64)}
@@ -22,7 +22,7 @@ type
 {$ENDIF}
 
 var
-  RDInstructionsAvailable: TRDRANDAvailability;
+  RDInstructionsAvailable: TRDRANDAvailable;
 
 implementation
 
@@ -215,7 +215,7 @@ asm
 end;
 
 //Function called from Initialization
-function CheckRDInstructions: TRDRANDAvailability;
+function CheckRDInstructions: TRDRANDAvailable;
 var
   LVendorId: array [0..11] of AnsiChar;
   LHighValBase: Cardinal;
@@ -228,8 +228,8 @@ var
   LUnUsed2: Cardinal;
   LNewFeatures: Cardinal;
 begin
-  Result.RDRANDAvailable := False;
-  Result.RDSEEDAvailable := False;
+  Result.RDRAND := False;
+  Result.RDSEED := False;
 
   //Check if CPUID istruction is valid testing the bit 21 of EFLAGS
   if IsCPUIDValid then
@@ -248,7 +248,7 @@ begin
 
         //ExFeatures (ECX register) bit 30 is 1 if RDRAND is available
         if (LExFeatures and ($1 shl 30)) <> 0 then
-          Result.RDRANDAvailable := True;
+          Result.RDRAND := True;
 
         if LHighValBase >= 7 then
         begin
@@ -257,7 +257,7 @@ begin
 
           //New Features (EBX register) bit 18 is 1 if RDSEED is available
           if (LNewFeatures and ($1 shl 18)) <> 0 then
-            Result.RDSEEDAvailable := True;
+            Result.RDSEED := True;
         end;
       end;
     end;
