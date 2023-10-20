@@ -9,6 +9,7 @@ Library to get CPU implemented Seed and Random number generators RDSEED and RDRN
   * Special thanks Delphi Praxis users (ones that made vasta majority of implementation and gave lot of insights on this matter). 
     * DelphiUdIT
     * Kas Ob
+    * DelphiUdIT (RDRAND and RDSEED instruction availibility checsks)
 
 ### TODO: 
-* Needs check for this feature is implemented in the CPU, function RdRndAvailable: Boolean; etc.
+* Testing that it actually works on different CPU-models and brands as expected
