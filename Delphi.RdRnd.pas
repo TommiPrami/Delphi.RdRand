@@ -151,7 +151,7 @@ end;
 //
 //3) Catch the new features of the CPU in use
 //
-procedure CPUIDGeneralCall(InEAX: cardinal; InECX: cardinal; out Reg_EAX, Reg_EBX, Reg_ECX, Reg_EDX); stdcall;
+procedure CPUIDGeneralCall(InEAX: Cardinal; InECX: Cardinal; out Reg_EAX, Reg_EBX, Reg_ECX, Reg_EDX); stdcall;
 asm
  {$IFDEF WIN64}
   // save context
