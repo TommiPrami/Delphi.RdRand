@@ -35,7 +35,7 @@ const
 function RDSEED64(const ARetryCount: UInt64 = 10): UInt64;
 asm
   .noframe
-  mov     RDX, aRetryCount
+  mov     RDX, ARetryCount
   inc     RDX
 @LOOP:
   dec     RDX
@@ -44,11 +44,13 @@ asm
   jnc     @LOOP
 @EXIT:
 end;
+{$ENDIF}
 
+{$IF Defined(WIN64)}
 function RDRAND64(const ARetryCount: UInt64 = 10): UInt64;
 asm
   .noframe
-  mov     RDX, aRetryCount
+  mov     RDX, ARetryCount
   inc     RDX
 @LOOP:
   dec     RDX
@@ -70,7 +72,9 @@ asm
   jnc     @LOOP
 @EXIT:
 end;
+{$ENDIF}
 
+{$IF Defined(WIN32)}
 function RDRAND32(const ARetryCount: UInt32 = 10): UInt32;
 asm
   inc edx
@@ -81,7 +85,9 @@ asm
   jnc     @LOOP
 @EXIT:
 end;
+{$ENDIF}
 
+{$IF Defined(WIN32)}
 function RDSEED64(const ARetryCount: UInt32 = 10): UInt64;
 var
   LValue1: UInt32;
@@ -92,7 +98,9 @@ begin
 
   Result := UInt64(LValue1) shl 32 or LValue2;
 end;
+{$ENDIF}
 
+{$IF Defined(WIN32)}
 function RDRAND64(const ARetryCount: UInt32 = 10): UInt64;
 var
   LValue1: UInt32;
@@ -105,13 +113,16 @@ begin
 end;
 {$ENDIF}
 
-//Internal functions, may be usefull to implement other check
-//Tested in Win32 and Win64 Protected Mode, tested in virtual mode (WINXP - WIN11 32 bit and 64 bit), not tested in real address mode
-//The Intel Documentation has more detail about CPUID
-//Jedi project has implemented TCPUInfo with more details.
+{ 
+	Internal functions, may be usefull to implement other check
+	Tested in Win32 and Win64 Protected Mode, tested in virtual mode (WINXP - WIN11 32 bit and 64 bit), 
+	not tested in real address mode
+	The Intel Documentation has more detail about CPUID
+	Jedi project has implemented TCPUInfo with more details.
 
-//First check that the CPU supports CPUID instructions. There are some exceptions with this rule,
-//but with very very old processors
+	First check that the CPU supports CPUID instructions. There are some exceptions with this rule,
+	but with very very old processors
+}
 function IsCPUIDValid: Boolean; register;
 asm
  {$IFDEF WIN64}
@@ -125,7 +136,7 @@ asm
   popfq                                //Restore original EFLAGS
   and RAX, $00200000                   //eax = zero if ID bit can't be changed, else non-zero
   jz @quit
-  mov RAX, $01                         //If the Result is boolean, the return parameter should be in A??? (true if A??? <> 0)
+  mov RAX, $01                         //If the Result is Boolean, the return parameter should be in A??? (true if A??? <> 0)
   @quit:
  {$ELSE}
   pushfd                               //Save EFLAGS
@@ -138,27 +149,28 @@ asm
   popfd                                //Restore original EFLAGS
   and eax, $00200000                   //eax = zero if ID bit can't be changed, else non-zero
   jz @quit
-  mov EAX, $01                         //If the Result is boolean, the return parameter should be in AL (true if AL <> 0)
+  mov EAX, $01                         //If the Result is Boolean, the return parameter should be in AL (true if AL <> 0)
   @quit:
  {$ENDIF}
 end;
 
-//1) Check that the CPU is an INTEL CPU, we don't know nothing about other's
-//   We can presume the AMD modern processors have the same check of INTEL, but only for some instructions.
-//   No test were made to verify this (no AMD processor available)
-//
-//2) Catch the features of the CPU in use
-//
-//3) Catch the new features of the CPU in use
-//
-procedure CPUIDGeneralCall(InEAX: Cardinal; InECX: Cardinal; out Reg_EAX, Reg_EBX, Reg_ECX, Reg_EDX); stdcall;
+{
+	1) Check that the CPU is an INTEL CPU, we don't know nothing about other's
+	   We can presume the AMD modern processors have the same check of INTEL, but only for some instructions.
+	   No test were made to verify this (no AMD processor available)
+
+	2) Catch the features of the CPU in use
+
+	3) Catch the new features of the CPU in use
+}
+procedure CPUIDGeneralCall(AInEAX: Cardinal; AInECX: Cardinal; out AReg_EAX, AReg_EBX, AReg_ECX, AReg_EDX); stdcall;
 asm
  {$IFDEF WIN64}
   // save context
   PUSH RBX
   // CPUID
-  MOV EAX, InEAX           //Generic function
-  MOV ECX, InECX           //Generic sub function
+  MOV EAX, AInEAX           //Generic function
+  MOV ECX, AInECX           //Generic sub function
   //
   //For CPU VENDOR STRING EAX := $0
   //ECX is not used when EAX = $0
@@ -171,9 +183,9 @@ asm
   //
   CPUID
   // store results
-  MOV R8, Reg_EAX
-  MOV R9, Reg_EBX
-  MOV R10, Reg_ECX
+  MOV R8, AReg_EAX
+  MOV R9, AReg_EBX
+  MOV R10, AReg_ECX
   MOV R11, Reg_EDX
   MOV Cardinal PTR [R8], EAX
   MOV Cardinal PTR [R9], EBX
@@ -200,13 +212,13 @@ asm
   //
   CPUID
   // store results
-  MOV EDI, Reg_EAX
+  MOV EDI, AReg_EAX
   MOV Cardinal PTR [EDI], EAX
-  MOV EAX, Reg_EBX
-  MOV EDI, Reg_ECX
+  MOV EAX, AReg_EBX
+  MOV EDI, AReg_ECX
   MOV Cardinal PTR [EAX], EBX
   MOV Cardinal PTR [EDI], ECX
-  MOV EAX, Reg_EDX
+  MOV EAX, AReg_EDX
   MOV Cardinal PTR [EAX], EDX
   // restore context
   POP EBX
@@ -214,7 +226,7 @@ asm
  {$ENDIF}
 end;
 
-//Function called from Initialization
+// Function called from Initialization
 function CheckRDInstructions: TRDRANDAvailable;
 var
   LVendorId: array [0..11] of AnsiChar;
