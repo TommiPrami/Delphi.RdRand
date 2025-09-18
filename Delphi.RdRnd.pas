@@ -114,14 +114,19 @@ end;
 {$ENDIF}
 
 { 
-  Internal functions, may be usefull to implement other check
-  Tested in Win32 and Win64 Protected Mode, tested in virtual mode (WINXP - WIN11 32 bit and 64 bit), 
-  not tested in real address mode
-  The Intel Documentation has more detail about CPUID
+  Internal functions, may be useful to implement other checks
+  Tested in Win32 and Win64 Protected Mode, tested in virtual mode 
+  (WINXP - WIN11 32 bit and 64 bit).
+   
+  Not tested in real address mode.
+  
+  The Intel Documentation has more detail about CPUID.
+  
   Jedi project has implemented TCPUInfo with more details.
 
-  First check that the CPU supports CPUID instructions. There are some exceptions with this rule,
-  but with very very old processors
+  First check that the CPU supports CPUID instructions. 
+  There are some exceptions with this rule,
+  but with very very old processors.
 }
 function IsCPUIDValid: Boolean; register;
 asm
@@ -156,8 +161,10 @@ end;
 
 {
   1) Check that the CPU is an INTEL CPU, we don't know nothing about other's
-     We can presume the AMD modern processors have the same check of INTEL, but only for some instructions.
-     No test were made to verify this (no AMD processor available)
+     We can presume the AMD modern processors have the same check of INTEL, 
+     but only for some instructions.
+     
+     No test were made to verify this (no AMD processor available).
 
   2) Catch the features of the CPU in use
 
