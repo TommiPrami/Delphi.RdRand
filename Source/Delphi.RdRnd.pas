@@ -1,4 +1,4 @@
-﻿unit Delphi.RdRnd;
+unit Delphi.RdRnd;
 
 interface
 
@@ -8,142 +8,271 @@ type
     RDSEED: Boolean;  // True if RDSEED is available
   end;
 
-{$IF Defined(WIN64)}
-  function RDSEED64(const ARetryCount: UInt64 = 10): UInt64;
-  function RDRAND64(const ARetryCount: UInt64 = 10): UInt64;
-{$ENDIF}
+{
+  The same API is available on every platform and bitness:
+    - 64 bit x86: all functions use the native 64/32 bit instruction forms
+    - 32 bit x86: the 64 bit values are composed from two 32 bit reads
+    - non-x86 (e.g. Windows on ARM): everything compiles, RDInstructionsAvailable
+      reports both instructions as unavailable and the Try* functions return False
 
-{$IF Defined(WIN32)}
+  With RDRAND/RDSEED every bit is of equal quality - unlike with classic PRNGs
+  there is no "weaker" half - so the 32 bit functions on a 64 bit build simply
+  use the 32 bit form of the instruction.
+
+  All functions make one attempt + up to ARetryCount retries.
+
+  The Try* functions return False if the CPU could not deliver a value within the
+  attempts (AValue is set to 0 in that case). The plain functions return 0 on
+  failure, which is indistinguishable from a valid zero - prefer the Try*
+  functions when failure matters (RDSEED especially can run out of entropy
+  under heavy use).
+
+  NOTE: The caller must check RDInstructionsAvailable first - executing these on
+  an x86/x64 CPU without RDRAND/RDSEED support raises an invalid opcode exception.
+}
+  function TryRDSEED32(out AValue: UInt32; const ARetryCount: UInt32 = 10): Boolean;
+  function TryRDRAND32(out AValue: UInt32; const ARetryCount: UInt32 = 10): Boolean;
+
+  function TryRDSEED64(out AValue: UInt64; const ARetryCount: UInt32 = 10): Boolean;
+  function TryRDRAND64(out AValue: UInt64; const ARetryCount: UInt32 = 10): Boolean;
+
   function RDSEED32(const ARetryCount: UInt32 = 10): UInt32;
   function RDRAND32(const ARetryCount: UInt32 = 10): UInt32;
 
   function RDSEED64(const ARetryCount: UInt32 = 10): UInt64;
   function RDRAND64(const ARetryCount: UInt32 = 10): UInt64;
-{$ENDIF}
 
 var
   RDInstructionsAvailable: TRDRANDAvailable;
 
 implementation
 
+{$IF Defined(CPUX86) or Defined(CPUX64)}
 const
-  //ID string to identify CPU Vendor, the are a multitude .. but we focalize on this
+  //ID strings to identify the CPU vendor; there are a multitude, but we focus on these
   VendorIDxIntel: array [0..11] of AnsiChar = 'GenuineIntel';
   VendorIDxAMD: array [0..11] of AnsiChar = 'AuthenticAMD';
+{$ENDIF}
 
-{$IF Defined(WIN64)}
-function RDSEED64(const ARetryCount: UInt64 = 10): UInt64;
+{$IF Defined(CPUX64)}
+function TryRDSEED32(out AValue: UInt32; const ARetryCount: UInt32 = 10): Boolean;
 asm
   .noframe
-  mov     RDX, ARetryCount
-  inc     RDX
+  // RCX = @AValue, EDX = ARetryCount
+  inc     EDX
 @LOOP:
-  dec     RDX
-  js      @Exit
-  DB      $48, $0F, $C7, $F8  // RDSEED RAX
+  dec     EDX
+  js      @FAIL
+  DB      $0F, $C7, $F8        // RDSEED EAX
+  jc      @SUCCESS
+  DB      $F3, $90             // PAUSE, Intel recommends it between RDSEED retries
+  jmp     @LOOP
+@FAIL:
+  xor     EAX, EAX
+  mov     [RCX], EAX
+  jmp     @DONE
+@SUCCESS:
+  mov     [RCX], EAX
+  mov     EAX, $01
+@DONE:
+end;
+
+function TryRDRAND32(out AValue: UInt32; const ARetryCount: UInt32 = 10): Boolean;
+asm
+  .noframe
+  // RCX = @AValue, EDX = ARetryCount
+  inc     EDX
+@LOOP:
+  dec     EDX
+  js      @FAIL
+  DB      $0F, $C7, $F0        // RDRAND EAX
   jnc     @LOOP
-@EXIT:
+  mov     [RCX], EAX
+  mov     EAX, $01
+  jmp     @DONE
+@FAIL:
+  xor     EAX, EAX
+  mov     [RCX], EAX
+@DONE:
+end;
+
+function TryRDSEED64(out AValue: UInt64; const ARetryCount: UInt32 = 10): Boolean;
+asm
+  .noframe
+  // RCX = @AValue, EDX = ARetryCount
+  inc     EDX
+@LOOP:
+  dec     EDX
+  js      @FAIL
+  DB      $48, $0F, $C7, $F8   // RDSEED RAX
+  jc      @SUCCESS
+  DB      $F3, $90             // PAUSE, Intel recommends it between RDSEED retries
+  jmp     @LOOP
+@FAIL:
+  xor     EAX, EAX
+  mov     [RCX], RAX
+  jmp     @DONE
+@SUCCESS:
+  mov     [RCX], RAX
+  mov     EAX, $01
+@DONE:
+end;
+
+function TryRDRAND64(out AValue: UInt64; const ARetryCount: UInt32 = 10): Boolean;
+asm
+  .noframe
+  // RCX = @AValue, EDX = ARetryCount
+  inc     EDX
+@LOOP:
+  dec     EDX
+  js      @FAIL
+  DB      $48, $0F, $C7, $F0   // RDRAND RAX
+  jnc     @LOOP
+  mov     [RCX], RAX
+  mov     EAX, $01
+  jmp     @DONE
+@FAIL:
+  xor     EAX, EAX
+  mov     [RCX], RAX
+@DONE:
+end;
+{$ELSEIF Defined(CPUX86)}
+function TryRDSEED32(out AValue: UInt32; const ARetryCount: UInt32 = 10): Boolean;
+asm
+  // EAX = @AValue, EDX = ARetryCount
+  mov     ECX, EAX             // Keep the pointer safe, RDSEED needs EAX
+  inc     EDX
+@LOOP:
+  dec     EDX
+  js      @FAIL
+  DB      $0F, $C7, $F8        // RDSEED EAX
+  jc      @SUCCESS
+  DB      $F3, $90             // PAUSE, Intel recommends it between RDSEED retries
+  jmp     @LOOP
+@FAIL:
+  xor     EAX, EAX
+  mov     [ECX], EAX
+  jmp     @DONE
+@SUCCESS:
+  mov     [ECX], EAX
+  mov     EAX, $01
+@DONE:
+end;
+
+function TryRDRAND32(out AValue: UInt32; const ARetryCount: UInt32 = 10): Boolean;
+asm
+  // EAX = @AValue, EDX = ARetryCount
+  mov     ECX, EAX             // Keep the pointer safe, RDRAND needs EAX
+  inc     EDX
+@LOOP:
+  dec     EDX
+  js      @FAIL
+  DB      $0F, $C7, $F0        // RDRAND EAX
+  jnc     @LOOP
+  mov     [ECX], EAX
+  mov     EAX, $01
+  jmp     @DONE
+@FAIL:
+  xor     EAX, EAX
+  mov     [ECX], EAX
+@DONE:
+end;
+
+function TryRDSEED64(out AValue: UInt64; const ARetryCount: UInt32 = 10): Boolean;
+var
+  LHigh: UInt32;
+  LLow: UInt32;
+begin
+  Result := TryRDSEED32(LHigh, ARetryCount) and TryRDSEED32(LLow, ARetryCount);
+
+  if Result then
+    AValue := UInt64(LHigh) shl 32 or LLow
+  else
+    AValue := 0;
+end;
+
+function TryRDRAND64(out AValue: UInt64; const ARetryCount: UInt32 = 10): Boolean;
+var
+  LHigh: UInt32;
+  LLow: UInt32;
+begin
+  Result := TryRDRAND32(LHigh, ARetryCount) and TryRDRAND32(LLow, ARetryCount);
+
+  if Result then
+    AValue := UInt64(LHigh) shl 32 or LLow
+  else
+    AValue := 0;
+end;
+{$ELSE}
+function TryRDSEED32(out AValue: UInt32; const ARetryCount: UInt32 = 10): Boolean;
+begin
+  AValue := 0;
+  Result := False;
+end;
+
+function TryRDRAND32(out AValue: UInt32; const ARetryCount: UInt32 = 10): Boolean;
+begin
+  AValue := 0;
+  Result := False;
+end;
+
+function TryRDSEED64(out AValue: UInt64; const ARetryCount: UInt32 = 10): Boolean;
+begin
+  AValue := 0;
+  Result := False;
+end;
+
+function TryRDRAND64(out AValue: UInt64; const ARetryCount: UInt32 = 10): Boolean;
+begin
+  AValue := 0;
+  Result := False;
 end;
 {$ENDIF}
 
-{$IF Defined(WIN64)}
-function RDRAND64(const ARetryCount: UInt64 = 10): UInt64;
-asm
-  .noframe
-  mov     RDX, ARetryCount
-  inc     RDX
-@LOOP:
-  dec     RDX
-  js      @Exit
-  DB      $48, $0F, $C7, $F0  // RDRAND RAX
-  jnc     @LOOP
-@EXIT:
-end;
-{$ENDIF}
-
-{$IF Defined(WIN32)}
 function RDSEED32(const ARetryCount: UInt32 = 10): UInt32;
-asm
-  inc edx
-@LOOP:
-  dec     edx
-  js      @Exit
-  DB      $0F, $C7, $F8   // RDSEED EAX
-  jnc     @LOOP
-@EXIT:
+begin
+  TryRDSEED32(Result, ARetryCount);
 end;
-{$ENDIF}
 
-{$IF Defined(WIN32)}
 function RDRAND32(const ARetryCount: UInt32 = 10): UInt32;
-asm
-  inc edx
-@LOOP:
-  dec     edx
-  js      @Exit
-  DB      $48, $0F, $C7, $F0  // RDRAND EAX
-  jnc     @LOOP
-@EXIT:
+begin
+  TryRDRAND32(Result, ARetryCount);
 end;
-{$ENDIF}
 
-{$IF Defined(WIN32)}
 function RDSEED64(const ARetryCount: UInt32 = 10): UInt64;
-var
-  LValue1: UInt32;
-  LValue2: UInt32;
 begin
-  LValue1 := RDSEED32(ARetryCount);
-  LValue2 := RDSEED32(ARetryCount);
-
-  Result := UInt64(LValue1) shl 32 or LValue2;
+  TryRDSEED64(Result, ARetryCount);
 end;
-{$ENDIF}
 
-{$IF Defined(WIN32)}
 function RDRAND64(const ARetryCount: UInt32 = 10): UInt64;
-var
-  LValue1: UInt32;
-  LValue2: UInt32;
 begin
-  LValue1 := RDRAND32(ARetryCount);
-  LValue2 := RDRAND32(ARetryCount);
-
-  Result := UInt64(LValue1) shl 32 or LValue2;
+  TryRDRAND64(Result, ARetryCount);
 end;
-{$ENDIF}
 
-{ 
+{$IF Defined(CPUX86) or Defined(CPUX64)}
+{
   Internal functions, may be useful to implement other checks
-  Tested in Win32 and Win64 Protected Mode, tested in virtual mode 
+  Tested in Win32 and Win64 Protected Mode, tested in virtual mode
   (WINXP - WIN11 32 bit and 64 bit).
-   
+
   Not tested in real address mode.
-  
+
   The Intel Documentation has more detail about CPUID.
-  
+
   Jedi project has implemented TCPUInfo with more details.
 
-  First check that the CPU supports CPUID instructions. 
-  There are some exceptions with this rule,
-  but with very very old processors.
+  First check that the CPU supports the CPUID instruction.
+  There are some exceptions to this rule, but only with very old
+  32 bit processors - in 64-bit mode CPUID is always available.
 }
+{$IF Defined(CPUX64)}
+function IsCPUIDValid: Boolean;
+begin
+  Result := True;
+end;
+{$ELSE}
 function IsCPUIDValid: Boolean; register;
 asm
- {$IFDEF WIN64}
-  pushfq                               //Save EFLAGS
-  pushfq                               //Store EFLAGS
-  xor qword [esp], $00200000           //Invert the ID bit in stored EFLAGS
-  popfq                                //Load stored EFLAGS (with ID bit inverted)
-  pushfq                               //Store EFLAGS again (ID bit may or may not be inverted)
-  pop rax                              //eax = modified EFLAGS (ID bit may or may not be inverted)
-  xor rax, qword [esp]                 //eax = whichever bits were changed
-  popfq                                //Restore original EFLAGS
-  and RAX, $00200000                   //eax = zero if ID bit can't be changed, else non-zero
-  jz @quit
-  mov RAX, $01                         //If the Result is Boolean, the return parameter should be in A??? (true if A??? <> 0)
-  @quit:
- {$ELSE}
   pushfd                               //Save EFLAGS
   pushfd                               //Store EFLAGS
   xor dword [esp], $00200000           //Invert the ID bit in stored EFLAGS
@@ -156,23 +285,23 @@ asm
   jz @quit
   mov EAX, $01                         //If the Result is Boolean, the return parameter should be in AL (true if AL <> 0)
   @quit:
- {$ENDIF}
 end;
+{$ENDIF}
 
 {
-  1) Check that the CPU is an INTEL CPU, we don't know nothing about other's
-     We can presume the AMD modern processors have the same check of INTEL, 
+  1) Check that the CPU is an Intel or AMD CPU, we know nothing about the others.
+     We can presume that modern AMD processors have the same checks as Intel,
      but only for some instructions.
-     
-     No test were made to verify this (no AMD processor available).
 
-  2) Catch the features of the CPU in use
+     No tests were made to verify this (no AMD processor available).
 
-  3) Catch the new features of the CPU in use
+  2) Read the features of the CPU in use
+
+  3) Read the new features of the CPU in use
 }
 procedure CPUIDGeneralCall(AInEAX: Cardinal; AInECX: Cardinal; out AReg_EAX, AReg_EBX, AReg_ECX, AReg_EDX); stdcall;
 asm
- {$IFDEF WIN64}
+ {$IFDEF CPUX64}
   // save context
   PUSH RBX
   // CPUID
@@ -193,7 +322,7 @@ asm
   MOV R8, AReg_EAX
   MOV R9, AReg_EBX
   MOV R10, AReg_ECX
-  MOV R11, Reg_EDX
+  MOV R11, AReg_EDX
   MOV Cardinal PTR [R8], EAX
   MOV Cardinal PTR [R9], EBX
   MOV Cardinal PTR [R10], ECX
@@ -205,8 +334,8 @@ asm
   PUSH EDI
   PUSH EBX
   // CPUID
-  MOV EAX, InEAX           // Generic function
-  MOV ECX, InECX           // Generic sub function
+  MOV EAX, AInEAX           // Generic function
+  MOV ECX, AInECX           // Generic sub function
   //
   //For CPU VENDOR STRING EAX := $0
   //ECX is not used when EAX = $0
@@ -232,9 +361,11 @@ asm
   POP EDI
  {$ENDIF}
 end;
+{$ENDIF}
 
 // Function called from Initialization
 function CheckRDInstructions: TRDRANDAvailable;
+{$IF Defined(CPUX86) or Defined(CPUX64)}
 var
   LVendorId: array [0..11] of AnsiChar;
   LHighValBase: Cardinal;
@@ -246,23 +377,25 @@ var
   LUnUsed1: Cardinal;
   LUnUsed2: Cardinal;
   LNewFeatures: Cardinal;
+{$ENDIF}
 begin
   Result.RDRAND := False;
   Result.RDSEED := False;
 
-  //Check if CPUID istruction is valid testing the bit 21 of EFLAGS
+{$IF Defined(CPUX86) or Defined(CPUX64)}
+  //Check if the CPUID instruction is valid by testing bit 21 of EFLAGS
   if IsCPUIDValid then
   begin
     //Get the Vendor string with EAX = 0 and ECX = 0
     CPUIDGeneralCall(0, 0, LHighValBase, LVendorId[0], LVendorId[8], LVendorId[4]);
 
-    //Verifiy that we are on CPU that we support
+    //Verify that we are on a CPU that we support
     if (LVendorId = VendorIDxIntel) or (LVendorId = VendorIDxAMD) then
     begin
-      //Now check if RDRAND and RDSEED is supported inside the extended CPUID flags
+      //Now check if RDRAND and RDSEED are supported inside the extended CPUID flags
       if LHighValBase >= 1 then  //Supports extensions
       begin
-        //With EAX = 1 AND ECX = 0 the Extension and the available of RDRAND can be read
+        //With EAX = 1 and ECX = 0 the Extensions and the availability of RDRAND can be read
         CPUIDGeneralCall(1, 0, LVersionInfo, LAdditionalInfo, LExFeatures, LStdFeatures);
 
         //ExFeatures (ECX register) bit 30 is 1 if RDRAND is available
@@ -271,7 +404,7 @@ begin
 
         if LHighValBase >= 7 then
         begin
-          //With EAX = 7 AND ECX = 0 the NEW Extension and the available of RDSEED can be read
+          //With EAX = 7 and ECX = 0 the NEW Extensions and the availability of RDSEED can be read
           CPUIDGeneralCall(7, 0, LHighValExt1, LNewFeatures, LUnUsed1, LUnUsed2);
 
           //New Features (EBX register) bit 18 is 1 if RDSEED is available
@@ -281,6 +414,7 @@ begin
       end;
     end;
   end;
+{$ENDIF}
 end;
 
 initialization
