@@ -205,8 +205,8 @@ asm
   PUSH EDI
   PUSH EBX
   // CPUID
-  MOV EAX, InEAX           //Generic function
-  MOV ECX, InECX           //Generic sub function
+  MOV EAX, InEAX           // Generic function
+  MOV ECX, InECX           // Generic sub function
   //
   //For CPU VENDOR STRING EAX := $0
   //ECX is not used when EAX = $0
