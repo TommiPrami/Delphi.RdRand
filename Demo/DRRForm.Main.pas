@@ -3,13 +3,15 @@ unit DRRForm.Main;
 interface
 
 uses
-  Winapi.Messages, Winapi.Windows, System.Classes, System.SysUtils, System.Variants, Vcl.ComCtrls, Vcl.Controls, Vcl.Dialogs,
-  Vcl.ExtCtrls, Vcl.Forms, Vcl.Graphics, Vcl.StdCtrls;
+  Winapi.Messages, Winapi.Windows, System.Classes, System.Diagnostics, System.SysUtils, System.Variants, Vcl.ComCtrls,
+  Vcl.Controls, Vcl.Dialogs, Vcl.ExtCtrls, Vcl.Forms, Vcl.Graphics, Vcl.StdCtrls;
 
 type
   TDRRMainForm = class(TForm)
     ButtonClearLog: TButton;
+    ButtonFillRandom: TButton;
     ButtonGenerateBitmaps: TButton;
+    ButtonGenerateColorBitmaps: TButton;
     ButtonRDRAND32: TButton;
     ButtonRDRAND64: TButton;
     ButtonRDSEED32: TButton;
@@ -31,7 +33,9 @@ type
     TabSheetAPIDemo: TTabSheet;
     TabSheetRandomness: TTabSheet;
     procedure ButtonClearLogClick(Sender: TObject);
+    procedure ButtonFillRandomClick(Sender: TObject);
     procedure ButtonGenerateBitmapsClick(Sender: TObject);
+    procedure ButtonGenerateColorBitmapsClick(Sender: TObject);
     procedure ButtonRDRAND32Click(Sender: TObject);
     procedure ButtonRDRAND64Click(Sender: TObject);
     procedure ButtonRDSEED32Click(Sender: TObject);
@@ -43,9 +47,12 @@ type
     procedure ButtonTryRDSEED64Click(Sender: TObject);
     procedure FormCreate(Sender: TObject);
   private
+    function GenerateRDRANDColorNoise(const AImage: TImage): Boolean;
     function GenerateRDRANDNoise(const AImage: TImage): Boolean;
+    procedure GenerateRTLColorNoise(const AImage: TImage);
     procedure GenerateRTLNoise(const AImage: TImage);
     procedure Log(const ALine: string);
+    procedure StopAndShowElapsed(var AStopwatch: TStopwatch; const ALabel: TLabel; const AName: string);
   end;
 
 var
@@ -56,12 +63,13 @@ implementation
 {$R *.dfm}
 
 uses
-  System.Diagnostics, Delphi.RdRnd;
+  Delphi.RdRnd;
 
 const
   NOISE_BITMAP_SIZE = 256;
   PIXEL_WHITE = $FFFFFFFF;
   PIXEL_BLACK = $FF000000;
+  ALPHA_OPAQUE = $FF000000;
 
 procedure TDRRMainForm.FormCreate(Sender: TObject);
 const
@@ -84,11 +92,19 @@ begin
   ButtonTryRDSEED64.Enabled := RDInstructionsAvailable.RDSEED;
   ButtonTryRDSEED32.Enabled := RDInstructionsAvailable.RDSEED;
   ButtonStressTest.Enabled := RDInstructionsAvailable.RDSEED;
+  ButtonFillRandom.Enabled := RDInstructionsAvailable.RDRAND;
 end;
 
 procedure TDRRMainForm.Log(const ALine: string);
 begin
   MemoLog.Lines.Add(ALine);
+end;
+
+procedure TDRRMainForm.StopAndShowElapsed(var AStopwatch: TStopwatch; const ALabel: TLabel; const AName: string);
+begin
+  AStopwatch.Stop;
+
+  ALabel.Caption := Format('%s - %s ms', [AName, FormatFloat('0.000', AStopwatch.Elapsed.TotalMilliseconds)]);
 end;
 
 procedure TDRRMainForm.ButtonRDRAND64Click(Sender: TObject);
@@ -144,6 +160,27 @@ begin
     Log('TryRDRAND64 = ' + UIntToStr(LValue))
   else
     Log('TryRDRAND64 failed - the CPU could not deliver a random value');
+end;
+
+procedure TDRRMainForm.ButtonFillRandomClick(Sender: TObject);
+var
+  LBuffer: array [0..31] of Byte;
+  LHex: string;
+  LIndex: Integer;
+begin
+  // TryFillRandom fills any buffer with random bytes - TStream style untyped
+  // parameter, so arrays, records and raw memory all work
+  if TryFillRandom(LBuffer, SizeOf(LBuffer)) then
+  begin
+    LHex := '';
+
+    for LIndex := Low(LBuffer) to High(LBuffer) do
+      LHex := LHex + IntToHex(LBuffer[LIndex], 2);
+
+    Log('TryFillRandom 32 bytes = ' + LHex);
+  end
+  else
+    Log('TryFillRandom failed - the CPU could not deliver enough random values');
 end;
 
 procedure TDRRMainForm.ButtonTryRDSEED64Click(Sender: TObject);
@@ -274,6 +311,92 @@ begin
   end;
 end;
 
+procedure TDRRMainForm.GenerateRTLColorNoise(const AImage: TImage);
+var
+  LBitmap: TBitmap;
+  LX: Integer;
+  LY: Integer;
+  LPixel: PCardinal;
+begin
+  LBitmap := TBitmap.Create;
+  try
+    LBitmap.PixelFormat := pf32bit;
+    LBitmap.SetSize(NOISE_BITMAP_SIZE, NOISE_BITMAP_SIZE);
+
+    for LY := 0 to LBitmap.Height - 1 do
+    begin
+      LPixel := LBitmap.ScanLine[LY];
+
+      for LX := 0 to LBitmap.Width - 1 do
+      begin
+        //One random byte per color channel
+        LPixel^ := ALPHA_OPAQUE or (Cardinal(Random($100)) shl 16) or (Cardinal(Random($100)) shl 8)
+          or Cardinal(Random($100));
+
+        Inc(LPixel);
+      end;
+    end;
+
+    AImage.Picture.Bitmap.Assign(LBitmap);
+  finally
+    LBitmap.Free;
+  end;
+end;
+
+function TDRRMainForm.GenerateRDRANDColorNoise(const AImage: TImage): Boolean;
+var
+  LBitmap: TBitmap;
+  LY: Integer;
+begin
+  LBitmap := TBitmap.Create;
+  try
+    LBitmap.PixelFormat := pf32bit;
+    LBitmap.SetSize(NOISE_BITMAP_SIZE, NOISE_BITMAP_SIZE);
+
+    // TryFillRandom straight into the bitmap memory through the ScanLine
+    // pointer, one row at a time - a pf32bit row is Width * 4 bytes. The
+    // alpha bytes get random data too, but TBitmap ignores them by default
+    // (AlphaFormat = afIgnored).
+    for LY := 0 to LBitmap.Height - 1 do
+      if not TryFillRandom(LBitmap.ScanLine[LY], LBitmap.Width * SizeOf(Cardinal)) then
+        Exit(False);
+
+    AImage.Picture.Bitmap.Assign(LBitmap);
+    Result := True;
+  finally
+    LBitmap.Free;
+  end;
+end;
+
+procedure TDRRMainForm.ButtonGenerateColorBitmapsClick(Sender: TObject);
+var
+  LStopwatch: TStopwatch;
+begin
+  // Same idea as the black/white noise, but with a random color per pixel.
+  // The RDRAND side shows how TryFillRandom can fill any memory block - here
+  // the bitmap pixels themselves.
+  Screen.Cursor := crHourGlass;
+  try
+    LStopwatch := TStopwatch.StartNew;
+    GenerateRTLColorNoise(ImageRTLRandom);
+    StopAndShowElapsed(LStopwatch, LabelBitmapRTL, 'Delphi RTL Random');
+
+    if RDInstructionsAvailable.RDRAND then
+    begin
+      LStopwatch := TStopwatch.StartNew;
+
+      if GenerateRDRANDColorNoise(ImageRDRAND) then
+        StopAndShowElapsed(LStopwatch, LabelBitmapRDRAND, 'RDRAND')
+      else
+        LabelBitmapRDRAND.Caption := 'RDRAND - could not deliver enough random values';
+    end
+    else
+      LabelBitmapRDRAND.Caption := 'RDRAND - not available on this CPU';
+  finally
+    Screen.Cursor := crDefault;
+  end;
+end;
+
 procedure TDRRMainForm.ButtonGenerateBitmapsClick(Sender: TObject);
 var
   LStopwatch: TStopwatch;
@@ -286,20 +409,14 @@ begin
   try
     LStopwatch := TStopwatch.StartNew;
     GenerateRTLNoise(ImageRTLRandom);
-    LStopwatch.Stop;
-
-    LabelBitmapRTL.Caption := Format('Delphi RTL Random - %s ms', [FormatFloat('0.000', LStopwatch.Elapsed.TotalMilliseconds)]);
+    StopAndShowElapsed(LStopwatch, LabelBitmapRTL, 'Delphi RTL Random');
 
     if RDInstructionsAvailable.RDRAND then
     begin
       LStopwatch := TStopwatch.StartNew;
 
       if GenerateRDRANDNoise(ImageRDRAND) then
-      begin
-        LStopwatch.Stop;
-
-        LabelBitmapRDRAND.Caption := Format('RDRAND - %s ms', [FormatFloat('0.000', LStopwatch.Elapsed.TotalMilliseconds)]);
-      end
+        StopAndShowElapsed(LStopwatch, LabelBitmapRDRAND, 'RDRAND')
       else
         LabelBitmapRDRAND.Caption := 'RDRAND - could not deliver enough random values';
     end

@@ -42,6 +42,25 @@ type
   function RDSEED64(const ARetryCount: UInt32 = 10): UInt64;
   function RDRAND64(const ARetryCount: UInt32 = 10): UInt64;
 
+{
+  Fill an arbitrary memory buffer with random data from RDRAND (the DRBG is
+  designed for bulk random data - use RDSEED when seeding other generators).
+
+  The untyped overload works like TStream.Read/Write, the Pointer overload
+  takes an address and a byte count. ACount is in bytes. Typed pointer
+  variables (PByte and friends) bind to the Pointer overload, so they fill
+  the memory they point to, not the pointer variable itself.
+
+  TryFillRandom returns False if the CPU could not deliver enough values -
+  the whole buffer is zeroed in that case, so it never contains half-filled
+  or stale data. FillRandom does the same but without the result.
+}
+  function TryFillRandom(const ABuffer: Pointer; const ACount: NativeInt; const ARetryCount: UInt32 = 10): Boolean; overload;
+  function TryFillRandom(var ABuffer; const ACount: NativeInt; const ARetryCount: UInt32 = 10): Boolean; overload;
+
+  procedure FillRandom(const ABuffer: Pointer; const ACount: NativeInt; const ARetryCount: UInt32 = 10); overload;
+  procedure FillRandom(var ABuffer; const ACount: NativeInt; const ARetryCount: UInt32 = 10); overload;
+
 var
   RDInstructionsAvailable: TRDRANDAvailable;
 
@@ -247,6 +266,61 @@ end;
 function RDRAND64(const ARetryCount: UInt32 = 10): UInt64;
 begin
   TryRDRAND64(Result, ARetryCount);
+end;
+
+function TryFillRandom(const ABuffer: Pointer; const ACount: NativeInt; const ARetryCount: UInt32 = 10): Boolean;
+var
+  LDest: PByte;
+  LRemaining: NativeInt;
+  LTail: UInt64;
+begin
+  Result := True;
+
+  if ACount <= 0 then
+    Exit;
+
+  LDest := ABuffer;
+  LRemaining := ACount;
+
+  //Full 64 bit chunks straight into the buffer (unaligned stores are fine on x86)
+  while LRemaining >= SizeOf(UInt64) do
+  begin
+    if not TryRDRAND64(PUInt64(LDest)^, ARetryCount) then
+    begin
+      FillChar(ABuffer^, ACount, 0);
+      Exit(False);
+    end;
+
+    Inc(LDest, SizeOf(UInt64));
+    Dec(LRemaining, SizeOf(UInt64));
+  end;
+
+  //Remaining 1..7 bytes from one more value
+  if LRemaining > 0 then
+  begin
+    if not TryRDRAND64(LTail, ARetryCount) then
+    begin
+      FillChar(ABuffer^, ACount, 0);
+      Exit(False);
+    end;
+
+    Move(LTail, LDest^, LRemaining);
+  end;
+end;
+
+function TryFillRandom(var ABuffer; const ACount: NativeInt; const ARetryCount: UInt32 = 10): Boolean;
+begin
+  Result := TryFillRandom(@ABuffer, ACount, ARetryCount);
+end;
+
+procedure FillRandom(const ABuffer: Pointer; const ACount: NativeInt; const ARetryCount: UInt32 = 10);
+begin
+  TryFillRandom(ABuffer, ACount, ARetryCount);
+end;
+
+procedure FillRandom(var ABuffer; const ACount: NativeInt; const ARetryCount: UInt32 = 10);
+begin
+  TryFillRandom(@ABuffer, ACount, ARetryCount);
 end;
 
 {$IF Defined(CPUX86) or Defined(CPUX64)}

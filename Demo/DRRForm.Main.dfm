@@ -125,13 +125,22 @@ object DRRMainForm: TDRRMainForm
           TabOrder = 8
           OnClick = ButtonStressTestClick
         end
+        object ButtonFillRandom: TButton
+          Left = 288
+          Top = 136
+          Width = 130
+          Height = 30
+          Caption = 'TryFillRandom'
+          TabOrder = 9
+          OnClick = ButtonFillRandomClick
+        end
         object ButtonClearLog: TButton
           Left = 424
           Top = 136
           Width = 130
           Height = 30
           Caption = 'Clear log'
-          TabOrder = 9
+          TabOrder = 10
           OnClick = ButtonClearLogClick
         end
       end
@@ -188,6 +197,15 @@ object DRRMainForm: TDRRMainForm
         Caption = 'Generate bitmaps'
         TabOrder = 0
         OnClick = ButtonGenerateBitmapsClick
+      end
+      object ButtonGenerateColorBitmaps: TButton
+        Left = 212
+        Top = 12
+        Width = 180
+        Height = 30
+        Caption = 'Generate color bitmaps'
+        TabOrder = 1
+        OnClick = ButtonGenerateColorBitmapsClick
       end
     end
   end
