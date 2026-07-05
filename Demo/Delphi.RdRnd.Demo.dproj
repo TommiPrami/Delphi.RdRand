@@ -160,6 +160,7 @@
             <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="..\Source\Delphi.RdRnd.pas"/>
+        <DCCReference Include="Delphi.Random.Analysis.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

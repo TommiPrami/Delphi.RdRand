@@ -4,7 +4,7 @@ interface
 
 uses
   Winapi.Messages, Winapi.Windows, System.Classes, System.Diagnostics, System.SysUtils, System.Variants, Vcl.ComCtrls,
-  Vcl.Controls, Vcl.Dialogs, Vcl.ExtCtrls, Vcl.Forms, Vcl.Graphics, Vcl.StdCtrls;
+  Vcl.Controls, Vcl.Dialogs, Vcl.ExtCtrls, Vcl.Forms, Vcl.Graphics, Vcl.StdCtrls, Delphi.Random.Analysis;
 
 type
   TDRRMainForm = class(TForm)
@@ -16,6 +16,7 @@ type
     ButtonRDRAND64: TButton;
     ButtonRDSEED32: TButton;
     ButtonRDSEED64: TButton;
+    ButtonRunStatistics: TButton;
     ButtonStressTest: TButton;
     ButtonTryRDRAND32: TButton;
     ButtonTryRDRAND64: TButton;
@@ -28,10 +29,13 @@ type
     LabelRDRAND: TLabel;
     LabelRDSEED: TLabel;
     MemoLog: TMemo;
+    MemoStatistics: TMemo;
     PageControlMain: TPageControl;
+    PanelStatistics: TPanel;
     PanelTop: TPanel;
     TabSheetAPIDemo: TTabSheet;
     TabSheetRandomness: TTabSheet;
+    TabSheetStatistics: TTabSheet;
     procedure ButtonClearLogClick(Sender: TObject);
     procedure ButtonFillRandomClick(Sender: TObject);
     procedure ButtonGenerateBitmapsClick(Sender: TObject);
@@ -40,6 +44,7 @@ type
     procedure ButtonRDRAND64Click(Sender: TObject);
     procedure ButtonRDSEED32Click(Sender: TObject);
     procedure ButtonRDSEED64Click(Sender: TObject);
+    procedure ButtonRunStatisticsClick(Sender: TObject);
     procedure ButtonStressTestClick(Sender: TObject);
     procedure ButtonTryRDRAND32Click(Sender: TObject);
     procedure ButtonTryRDRAND64Click(Sender: TObject);
@@ -52,6 +57,8 @@ type
     procedure GenerateRTLColorNoise(const AImage: TImage);
     procedure GenerateRTLNoise(const AImage: TImage);
     procedure Log(const ALine: string);
+    procedure LogStat(const ALine: string);
+    procedure RunStatisticsFor(const AName: string; const ASample32, AObservation16: TRandomSampleFunc);
     procedure StopAndShowElapsed(var AStopwatch: TStopwatch; const ALabel: TLabel; const AName: string);
   end;
 
@@ -70,6 +77,8 @@ const
   PIXEL_WHITE = $FFFFFFFF;
   PIXEL_BLACK = $FF000000;
   ALPHA_OPAQUE = $FF000000;
+
+  VERDICT: array [Boolean] of string = ('FAIL', 'PASS');
 
 procedure TDRRMainForm.FormCreate(Sender: TObject);
 const
@@ -308,6 +317,95 @@ begin
     Result := True;
   finally
     LBitmap.Free;
+  end;
+end;
+
+procedure TDRRMainForm.LogStat(const ALine: string);
+begin
+  MemoStatistics.Lines.Add(ALine);
+  MemoStatistics.Update;
+end;
+
+procedure TDRRMainForm.RunStatisticsFor(const AName: string; const ASample32, AObservation16: TRandomSampleFunc);
+var
+  LFrequency: TFrequencyResult;
+  LBirthday: TBirthdaySpacingsResult;
+  LPrediction: TPredictionResult;
+begin
+  LogStat('=== ' + AName + ' ===');
+
+  LFrequency := FrequencyTest(ASample32);
+  LogStat(Format('  Monobit:           %.3f%% ones (expect ~50%%) - %s',
+    [LFrequency.OnesPercent, VERDICT[LFrequency.MonobitPassed]]));
+  LogStat(Format('  Byte chi-square:   %.1f (expect ~255) - %s',
+    [LFrequency.ByteChiSquare, VERDICT[LFrequency.ChiSquarePassed]]));
+
+  LBirthday := BirthdaySpacingsTest(ASample32);
+  LogStat(Format('  Birthday spacings: %d duplicates (expect ~%d, deviation %.1f sigma) - %s',
+    [LBirthday.Duplicates, LBirthday.Expected, LBirthday.Sigma, VERDICT[LBirthday.Passed]]));
+
+  LPrediction := PredictionTest(AObservation16);
+  if LPrediction.StateRecovered then
+    LogStat(Format('  Prediction:        state recovered, %d/%d future values predicted - %s',
+      [LPrediction.PredictedHits, LPrediction.PredictedCount, VERDICT[LPrediction.Passed]]))
+  else
+    LogStat(Format('  Prediction:        no LCG state matches the observations - unpredictable - %s',
+      [VERDICT[LPrediction.Passed]]));
+
+  LogStat('');
+end;
+
+procedure TDRRMainForm.ButtonRunStatisticsClick(Sender: TObject);
+var
+  LStopwatch: TStopwatch;
+begin
+  Screen.Cursor := crHourGlass;
+  try
+    MemoStatistics.Lines.Clear;
+    LStopwatch := TStopwatch.StartNew;
+
+    // Delphi RTL: compose 32 bits from two Random calls (16 good high bits
+    // each), single Random($10000) draws for the prediction observations
+    RunStatisticsFor('Delphi RTL Random (32 bit LCG)',
+      function: UInt32
+      begin
+        Result := (UInt32(Random($10000)) shl 16) or UInt32(Random($10000));
+      end,
+      function: UInt32
+      begin
+        Result := UInt32(Random($10000));
+      end);
+
+    if RDInstructionsAvailable.RDRAND then
+      RunStatisticsFor('RDRAND',
+        function: UInt32
+        var
+          LValue: UInt32;
+        begin
+          TryRDRAND32(LValue);
+          Result := LValue;
+        end,
+        function: UInt32
+        var
+          LValue: UInt32;
+        begin
+          TryRDRAND32(LValue);
+          Result := LValue shr 16;
+        end)
+    else
+      LogStat('RDRAND is not available on this CPU');
+
+    LStopwatch.Stop;
+
+    LogStat(Format('Tests took %s ms', [FormatFloat('0.000', LStopwatch.Elapsed.TotalMilliseconds)]));
+    LogStat('');
+    LogStat('The first two tests can not tell the generators apart - the RTL LCG passes');
+    LogStat('casual statistics, which is why the noise bitmaps look identical. Its real');
+    LogStat('weaknesses are the 32 bit state and the linear structure: the birthday');
+    LogStat('spacings test (Diehard suite) exposes the lattice, and brute forcing the');
+    LogStat('state from three observed outputs makes every future value predictable.');
+  finally
+    Screen.Cursor := crDefault;
   end;
 end;
 

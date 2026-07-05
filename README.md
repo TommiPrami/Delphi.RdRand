@@ -115,6 +115,16 @@ The VCL demo in `Demo\` has two tabs:
   noise comparison: Delphi RTL `Random` and RDRAND side by side, as black/white
   (one random bit per pixel) and as random colors (`TryFillRandom` straight into the
   bitmap scanlines), with timings
+* **Statistical tests** — quantifies the quality difference the eye can not see in the
+  bitmaps. Monobit and byte chi-square pass for both generators; the birthday spacings
+  test (Diehard) and a state-recovery prediction attack expose the RTL LCG (it deviates
+  many sigma on birthday spacings, and three observed outputs are enough to predict all
+  future values), while RDRAND passes both
+
+The statistical tests live in their own unit, `Demo\Delphi.Random.Analysis.pas`. It is
+self-contained (no VCL, no dependency on the RdRand unit): each test takes a sample source
+callback (`reference to function: UInt32`) and returns a result record, so any random
+generator can be analysed the same way.
 
 ### Forum post about this
 * https://en.delphipraxis.net/topic/10271-getting-rdseed-with-delphi/?tab=comments#comment-81748

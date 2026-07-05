@@ -17,7 +17,7 @@ object DRRMainForm: TDRRMainForm
     Top = 0
     Width = 624
     Height = 441
-    ActivePage = TabSheetRandomness
+    ActivePage = TabSheetAPIDemo
     Align = alClient
     TabOrder = 0
     object TabSheetAPIDemo: TTabSheet
@@ -206,6 +206,43 @@ object DRRMainForm: TDRRMainForm
         Caption = 'Generate color bitmaps'
         TabOrder = 1
         OnClick = ButtonGenerateColorBitmapsClick
+      end
+    end
+    object TabSheetStatistics: TTabSheet
+      Caption = 'Statistical tests'
+      object PanelStatistics: TPanel
+        Left = 0
+        Top = 0
+        Width = 616
+        Height = 54
+        Align = alTop
+        BevelOuter = bvNone
+        TabOrder = 0
+        object ButtonRunStatistics: TButton
+          Left = 16
+          Top = 12
+          Width = 180
+          Height = 30
+          Caption = 'Run statistical tests'
+          TabOrder = 0
+          OnClick = ButtonRunStatisticsClick
+        end
+      end
+      object MemoStatistics: TMemo
+        Left = 0
+        Top = 54
+        Width = 616
+        Height = 357
+        Align = alClient
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWindowText
+        Font.Height = -12
+        Font.Name = 'Consolas'
+        Font.Style = []
+        ParentFont = False
+        ReadOnly = True
+        ScrollBars = ssVertical
+        TabOrder = 1
       end
     end
   end
