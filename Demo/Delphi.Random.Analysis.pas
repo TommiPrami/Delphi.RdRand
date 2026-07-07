@@ -162,7 +162,7 @@ var
   LExpectedPerTrial: Double;
 begin
   // Marsaglia's birthday spacings test (Diehard): take m samples as "birthdays"
-  // in a year of n = 2^32 days, sort them, take the spacings between neighbours
+  // in a year of n = 2^32 days, sort them, take the spacings between neighbors
   // and count how many spacings are duplicated. For a good generator the number
   // of duplicates is Poisson distributed with lambda = m^3 / (4n) per trial.
   // LCGs fail decisively because their outputs lie on a lattice, which makes the
