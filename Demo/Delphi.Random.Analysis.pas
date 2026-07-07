@@ -118,7 +118,7 @@ begin
   LIndex := 0;
   while LIndex < LByteCount do
   begin
-    LValue := ANextSample();
+    LValue := ANextSample;
     LData[LIndex] := Byte(LValue shr 24);
     LData[LIndex + 1] := Byte(LValue shr 16);
     LData[LIndex + 2] := Byte(LValue shr 8);
@@ -174,7 +174,7 @@ begin
   for LTrial := 1 to ATrials do
   begin
     for LIndex := 0 to ASampleCount - 1 do
-      LSamples[LIndex] := ANextSample();
+      LSamples[LIndex] := ANextSample;
 
     TArray.Sort<UInt32>(LSamples);
 
@@ -222,10 +222,10 @@ begin
   SetLength(LActual, APredictCount);
 
   for LIndex := 0 to AObservationCount - 1 do
-    LObserved[LIndex] := ANextObservation() and $FFFF;
+    LObserved[LIndex] := ANextObservation and $FFFF;
 
   for LIndex := 0 to APredictCount - 1 do
-    LActual[LIndex] := ANextObservation() and $FFFF;
+    LActual[LIndex] := ANextObservation and $FFFF;
 
   Result.CandidateCount := 0;
   Result.PredictedCount := APredictCount;
