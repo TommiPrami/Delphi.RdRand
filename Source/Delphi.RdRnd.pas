@@ -1,4 +1,4 @@
-unit Delphi.RdRnd;
+﻿unit Delphi.RdRnd;
 
 interface
 

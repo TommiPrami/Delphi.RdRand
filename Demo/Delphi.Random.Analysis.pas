@@ -1,4 +1,4 @@
-unit Delphi.Random.Analysis;
+﻿unit Delphi.Random.Analysis;
 
 {
   Statistical tests for judging the quality of a random number source.
